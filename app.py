@@ -42,6 +42,13 @@ try:
     df_combinado[columnas_numericas] = df_combinado[columnas_numericas].apply(
         pd.to_numeric, errors="coerce"
     )
+    columnas_medicion = [
+        "metrics.temperature.max",
+        "metrics.temperature.avg",
+        "metrics.temperature.min",
+        "metrics.precipitation.avg",
+    ]
+    df_combinado[columnas_medicion] = df_combinado[columnas_medicion].astype(float)
 
     # 4. Trata el valor centinela como un dato ausente.
     df_combinado[columnas_numericas] = df_combinado[columnas_numericas].replace(
@@ -71,6 +78,43 @@ try:
     )
     df_combinado.loc[mascara_inches, "metrics.precipitation.unit"] = "mm"
 
+    # Deriva el rango térmico y la lluvia acumulada respetando ciudad y año.
+    df_combinado["thermal_range"] = (
+        df_combinado["metrics.temperature.max"]
+        - df_combinado["metrics.temperature.min"]
+    )
+    df_combinado["cumulative_rain_year"] = df_combinado.groupby(
+        ["city", "year"]
+    )["metrics.precipitation.avg"].cumsum()
+
+    # Un índice mayor refleja más calor máximo combinado con menos lluvia.
+    df_combinado["kpi.heat_stress_index"] = (
+        df_combinado["metrics.temperature.max"]
+        / (df_combinado["metrics.precipitation.avg"] + 1)
+    )
+
+    # Compara la temperatura media mensual con el historial de cada ciudad.
+    temperatura_media = df_combinado["metrics.temperature.avg"]
+    media_historica = df_combinado.groupby("city")[
+        "metrics.temperature.avg"
+    ].transform("mean")
+    desviacion_historica = df_combinado.groupby("city")[
+        "metrics.temperature.avg"
+    ].transform("std")
+    df_combinado["kpi.temp_zscore"] = (
+        temperatura_media - media_historica
+    ) / desviacion_historica
+
+    # Resume el historial completo y los extremos absolutos por año y ciudad.
+    resumen_ciudad = df_combinado.groupby("city").agg(
+        temperatura_media_historica=("metrics.temperature.avg", "mean"),
+        lluvia_total=("metrics.precipitation.avg", "sum"),
+    )
+    resumen_anual = df_combinado.groupby(["city", "year"]).agg(
+        temperatura_maxima_absoluta=("metrics.temperature.max", "max"),
+        temperatura_minima_absoluta=("metrics.temperature.min", "min"),
+    )
+
     registros_finales = len(df_combinado)
     registros_borrados = registros_iniciales - registros_finales
 
@@ -85,6 +129,10 @@ try:
 
     print(df_combinado)
     print(f"Informe de limpieza guardado en: {ruta_informe}")
+    print("\nResumen por ciudad:")
+    print(resumen_ciudad)
+    print("\nResumen anual por ciudad:")
+    print(resumen_anual)
 
 except requests.exceptions.RequestException as e:
     print(f"Error en la petición: {e}")
