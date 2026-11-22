@@ -115,8 +115,22 @@ try:
         temperatura_minima_absoluta=("metrics.temperature.min", "min"),
     )
 
+    # Conserva el nombre solicitado para el DataFrame completo.
+    df_total = df_combinado
+
     registros_finales = len(df_combinado)
     registros_borrados = registros_iniciales - registros_finales
+
+    # Crea la carpeta de salida y guarda los tres DataFrames con PyArrow.
+    carpeta_data = Path(__file__).resolve().parent / "data"
+    carpeta_data.mkdir(parents=True, exist_ok=True)
+    df_total.to_parquet(carpeta_data / "df_total.parquet", engine="pyarrow", index=False)
+    resumen_ciudad.to_parquet(
+        carpeta_data / "resumen_ciudad.parquet", engine="pyarrow", index=True
+    )
+    resumen_anual.to_parquet(
+        carpeta_data / "resumen_anual.parquet", engine="pyarrow", index=True
+    )
 
     # Guarda un resumen junto al script para dejar constancia de la limpieza.
     ruta_informe = Path(__file__).resolve().with_name("informe_limpieza.txt")
